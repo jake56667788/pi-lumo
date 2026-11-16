@@ -1,6 +1,51 @@
-# pi-lumo
+# pi-lumo (fork)
+
+> **This is a fork of [rebehzat/pi-lumo](https://github.com/rebehzat/pi-lumo).** It fixes the `403 Request rejected by policy` error from [issue #6](https://github.com/rebehzat/pi-lumo/issues/6). The same fix is proposed upstream in [PR #7](https://github.com/rebehzat/pi-lumo/pull/7). Once that's merged, you can switch back to the original.
 
 Use Proton Lumo as a model provider in the [Pi coding agent](https://github.com/badlogic/pi-mono).
+
+## What's different in this fork
+
+- **Sends `lumo.client_type`.** Lumo now blocks every chat request without it. The default is `lumo_desktop`, and you can change it with `LUMO_CLIENT_TYPE` (for example `frontend`) if Proton starts rejecting it.
+- **Always sends your UID (`x-pm-uid`).** Without it, Lumo ignores your token and treats you as a guest. If a token is set without `LUMO_UID`, Pi now stops with a clear message instead.
+
+Everything else works the same as upstream.
+
+## Quick start
+
+1. Install the fork:
+
+   ```bash
+   pi install git:github.com/jake56667788/pi-lumo
+   ```
+
+2. Sign in at [lumo.proton.me](https://lumo.proton.me/) in Firefox, Chrome, Chromium, or Safari. pi-lumo usually finds that session automatically.
+
+3. If Pi says `No models available`, set your credentials by hand. See [Extracting credentials from DevTools](#extracting-credentials-from-devtools) for where to find them.
+
+   macOS / Linux:
+
+   ```bash
+   export LUMO_UID="<your-id>"        # the part after AUTH- in the cookie name
+   export LUMO_TOKEN="<cookie value>" # the full value of that cookie
+   ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   $env:LUMO_UID="<your-id>"
+   $env:LUMO_TOKEN="<cookie value>"
+   ```
+
+4. Start Pi with a Lumo model:
+
+   ```bash
+   pi --model lumo/lumo-lite
+   ```
+
+The rest of this README is the full reference.
+
+## Models
 
 The extension adds three choices to Pi's model picker:
 
@@ -15,13 +60,13 @@ Lite and Max support Pi's thinking control. Pi's `off`, `minimal`, `low`, `mediu
 Automatic Firefox, Chrome, and Chromium authentication require the `sqlite3` command-line tool. It is already installed on many Linux distributions and on macOS; otherwise install your distribution's `sqlite` package.
 
 ```bash
-pi install git:github.com/rebehzat/pi-lumo
+pi install git:github.com/jake56667788/pi-lumo
 ```
 
 To try it without installing:
 
 ```bash
-pi -e git:github.com/rebehzat/pi-lumo
+pi -e git:github.com/jake56667788/pi-lumo
 ```
 
 ## Authenticate
@@ -79,7 +124,7 @@ pi
 | --- | --- | --- |
 | Models are listed, but requests fail with `401 "Invalid access token"` | The `eyJ…` AUTH cookie was used, or the session token expired | Use the opaque AUTH cookie; refresh Lumo in the browser and re-copy |
 | `No models available` | No resolvable credentials: variables unset and no live browser session found | Export `LUMO_UID` and `LUMO_TOKEN`, or sign in to Lumo in a supported browser |
-| `403 {"message":"Request rejected by policy.","type":"policy_rejection","code":"blocked_by_policy"}` | Older pi-lumo: Lumo now rejects chat requests whose body has no `lumo.client_type` field | Update pi-lumo |
+| `403 {"message":"Request rejected by policy.","type":"policy_rejection","code":"blocked_by_policy"}` | Older pi-lumo (or the upstream version before PR #7): Lumo now rejects chat requests whose body has no `lumo.client_type` field | Install this fork. If it still happens, Proton may have blocked the client type: try `LUMO_CLIENT_TYPE=frontend` |
 | `Failed to resolve provider "lumo" header "x-pm-uid" from environment variable: LUMO_UID` | A token was supplied without its UID: `LUMO_TOKEN` without `LUMO_UID`, a `LUMO_API_KEY`, or a token saved with Pi's `/login`. Without `x-pm-uid`, Lumo ignores the token | Also export `LUMO_UID` (the part after `AUTH-` in the cookie name) |
 | Models work in one shell, then vanish in another | The exports were typed into a shell but never persisted | Add the exports to `~/.zshrc`, `~/.bashrc`, or your shell's equivalent |
 
@@ -113,6 +158,15 @@ pi
 ```
 
 Firefox-fork browsers such as Zen Browser and LibreWolf store cookies in Firefox's format, so they work through `LUMO_FIREFOX_PROFILE` — point it at the fork's profile directory containing `cookies.sqlite`.
+
+### Client type override
+
+This fork tells Lumo it is the desktop app (`lumo_desktop`). This value isn't documented by Proton, so it could stop working. If requests start failing with the 403 above, try another value without waiting for an update:
+
+```bash
+export LUMO_CLIENT_TYPE="frontend"   # PowerShell: $env:LUMO_CLIENT_TYPE="frontend"
+pi
+```
 
 ## Select a model
 
