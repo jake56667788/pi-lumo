@@ -75,3 +75,16 @@ test("extracts a UID and token without persisting either", () => {
     },
   );
 });
+
+test("skips the JWT-shaped AUTH cookie, which Lumo's API rejects", () => {
+  assert.deepEqual(
+    credentialsFromCookies(
+      [
+        { name: "AUTH-user-id", value: "eyJhbGciOiJIUzI1NiJ9.payload.sig" },
+        { name: "AUTH-user-id", value: "opaque-token" },
+      ],
+      "/profile/cookies.sqlite",
+    ),
+    { uid: "user-id", token: "opaque-token", profile: "/profile/cookies.sqlite" },
+  );
+});
