@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { discoverBraveCredentials } from "./brave-auth.ts";
 import { discoverChromeCredentials } from "./chrome-auth.ts";
 import { discoverChromiumCredentials } from "./chromium-auth.ts";
+import { takeDiscoveryNotes } from "./discovery-notes.ts";
 import { discoverFirefoxCredentials } from "./firefox-auth.ts";
 import { discoverSafariCredentials } from "./safari-auth.ts";
 
@@ -16,6 +21,7 @@ export function discoverBrowserCredentials(
     discoverFirefoxCredentials,
     discoverChromeCredentials,
     discoverChromiumCredentials,
+    discoverBraveCredentials,
     discoverSafariCredentials,
   ],
 ): BrowserCredentials | undefined {
@@ -115,9 +121,63 @@ export function getAuthConfig(
   return { apiKey: "$LUMO_API_KEY", headers: { ...UID_FROM_ENV } };
 }
 
+/** Path of the auth.json Pi's /login writes to (`$PI_CODING_AGENT_DIR` or `~/.pi/agent`). */
+export function piAuthFile(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  const configured = env.PI_CODING_AGENT_DIR;
+  const agentDir = configured
+    ? configured === "~"
+      ? home
+      : configured.startsWith("~/") || configured.startsWith("~\\")
+        ? join(home, configured.slice(2))
+        : configured
+    : join(home, ".pi", "agent");
+  return join(agentDir, "auth.json");
+}
+
+/** True when Pi has a Lumo key saved with /login, which Pi uses instead of the provider's own key. */
+export function hasSavedLoginKey(authFile = piAuthFile()): boolean {
+  try {
+    const saved = JSON.parse(readFileSync(authFile, "utf8").replace(/^\uFEFF/, "")) as Record<string, unknown>;
+    return Boolean(saved && typeof saved === "object" && saved[PROVIDER_ID]);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Warnings shown once at startup, for setups that otherwise fail with an
+ * unexplained 401/403 later:
+ * - a key saved with /login silently replaces LUMO_TOKEN or the browser session;
+ * - a browser profile exists but its Lumo session can't be read (e.g. Brave on Windows).
+ */
+export function startupWarnings(
+  env: NodeJS.ProcessEnv,
+  auth: { apiKey: string },
+  notes: string[],
+  savedLoginKey: boolean,
+): string[] {
+  const warnings: string[] = [];
+  const fromBrowser = !auth.apiKey.startsWith("$");
+
+  if (savedLoginKey && !env.LUMO_API_KEY && (env.LUMO_TOKEN || fromBrowser)) {
+    warnings.push(
+      `pi-lumo: Pi is using a Lumo key saved with /login instead of ${env.LUMO_TOKEN ? "LUMO_TOKEN" : "your browser session"}. ` +
+        "If Lumo answers 401 Invalid access token, run /logout in Pi and choose Lumo to remove the saved key.",
+    );
+  }
+
+  if (!fromBrowser && !savedLoginKey && !env.LUMO_TOKEN && !env.LUMO_API_KEY && !env.LUMO_UID) {
+    warnings.push(...notes);
+  }
+
+  return warnings;
+}
+
 export default function lumoProvider(pi: ExtensionAPI): void {
   if (process.env.PI_LUMO_DEBUG) console.error("pi-lumo: extension loaded");
   const auth = getAuthConfig();
+  const warnings = startupWarnings(process.env, auth, takeDiscoveryNotes(), hasSavedLoginKey());
+  if (process.env.PI_LUMO_DEBUG) for (const warning of warnings) console.error(warning);
 
   pi.registerProvider(PROVIDER_ID, {
     name: "Proton Lumo",
@@ -141,6 +201,19 @@ export default function lumoProvider(pi: ExtensionAPI): void {
     const lumo = (payload.lumo as Record<string, unknown> | undefined) ?? {};
     return { ...payload, lumo: { client_type: LUMO_CLIENT_TYPE, ...lumo } };
   });
+
+  if (warnings.length > 0) {
+    let shown = false;
+    pi.on("session_start", (_event, ctx) => {
+      if (shown) return;
+      shown = true;
+      try {
+        for (const warning of warnings) ctx.ui.notify(warning, "warning");
+      } catch {
+        // No UI (e.g. print mode): the warnings are informational only.
+      }
+    });
+  }
 }
 
 export const LUMO_CLIENT_TYPE = process.env.LUMO_CLIENT_TYPE || "lumo_desktop";

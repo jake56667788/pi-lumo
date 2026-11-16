@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { isUsableLumoToken } from "./lumo-domain.ts";
 import { querySqliteRows } from "./sqlite-cookies.ts";
 
 export interface FirefoxCredentials {
@@ -69,7 +70,7 @@ export function cookieDatabases(roots = firefoxProfileRoots()): string[] {
 
 export function credentialsFromCookies(rows: CookieRow[], profile: string): FirefoxCredentials | undefined {
   for (const row of rows) {
-    if (!row.name.startsWith("AUTH-") || !row.value) continue;
+    if (!row.name.startsWith("AUTH-") || !isUsableLumoToken(row.value)) continue;
     const uid = row.name.slice("AUTH-".length);
     if (uid) return { uid, token: row.value, profile };
   }
