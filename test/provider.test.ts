@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import lumoProvider, {
   BASE_URL,
   discoverBrowserCredentials,
   getAuthConfig,
+  hasSavedLoginKey,
   LUMO_MODELS,
+  piAuthFile,
   PROVIDER_ID,
+  startupWarnings,
 } from "../index.js";
 
 test("exports all three current Lumo choices", () => {
@@ -154,6 +160,44 @@ test("discoverBrowserCredentials survives a browser discoverer that throws", () 
   assert.deepEqual(credentials, { uid: "safari-uid", token: "safari-token", profile: "/profile/Cookies.binarycookies" });
 });
 
-test("discoverBrowserCredentials() wires up Firefox, Chrome, Chromium, and Safari by default without throwing", () => {
+test("discoverBrowserCredentials() wires up Firefox, Chrome, Chromium, Brave, and Safari by default without throwing", () => {
   assert.doesNotThrow(() => discoverBrowserCredentials());
+});
+
+test("finds the auth.json that Pi's /login writes to", () => {
+  assert.equal(piAuthFile({}, "/home/t"), join("/home/t", ".pi", "agent", "auth.json"));
+  assert.equal(piAuthFile({ PI_CODING_AGENT_DIR: "/custom/agent" }, "/home/t"), join("/custom/agent", "auth.json"));
+  assert.equal(piAuthFile({ PI_CODING_AGENT_DIR: "~/agent" }, "/home/t"), join("/home/t", "agent", "auth.json"));
+
+  const directory = mkdtempSync(join(tmpdir(), "pi-lumo-auth-test-"));
+  try {
+    const file = join(directory, "auth.json");
+    assert.equal(hasSavedLoginKey(file), false, "missing file");
+    writeFileSync(file, JSON.stringify({ openai: { type: "api_key", key: "k" } }));
+    assert.equal(hasSavedLoginKey(file), false);
+    writeFileSync(file, `\uFEFF${JSON.stringify({ lumo: { type: "api_key", key: "k" } })}`);
+    assert.equal(hasSavedLoginKey(file), true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("warns when a key saved with /login replaces LUMO_TOKEN or the browser session", () => {
+  const fromEnv = { apiKey: "$LUMO_TOKEN" };
+  const fromBrowser = { apiKey: "browser-token" };
+
+  assert.match(startupWarnings({ LUMO_TOKEN: "t", LUMO_UID: "u" }, fromEnv, [], true)[0], /instead of LUMO_TOKEN.*\/logout/);
+  assert.match(startupWarnings({}, fromBrowser, [], true)[0], /instead of your browser session/);
+  assert.deepEqual(startupWarnings({ LUMO_TOKEN: "t", LUMO_UID: "u" }, fromEnv, [], false), []);
+  assert.deepEqual(startupWarnings({ LUMO_API_KEY: "k" }, { apiKey: "$LUMO_API_KEY" }, [], true), []);
+});
+
+test("shows browser discovery notes only when nothing else supplies a login", () => {
+  const note = "pi-lumo found your Brave profile but can't read its Lumo session";
+  const nothing = { apiKey: "$LUMO_API_KEY" };
+
+  assert.deepEqual(startupWarnings({}, nothing, [note], false), [note]);
+  assert.deepEqual(startupWarnings({ LUMO_TOKEN: "t", LUMO_UID: "u" }, { apiKey: "$LUMO_TOKEN" }, [note], false), []);
+  assert.deepEqual(startupWarnings({ LUMO_UID: "u" }, nothing, [note], false), []);
+  assert.deepEqual(startupWarnings({}, { apiKey: "firefox-token" }, [note], false), []);
 });

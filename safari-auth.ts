@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { isLumoCookieDomain } from "./lumo-domain.ts";
+import { isLumoCookieDomain, isUsableLumoToken } from "./lumo-domain.ts";
 
 export interface SafariCredentials {
   uid: string;
@@ -95,7 +95,7 @@ export function credentialsFromSafariCookies(
 ): SafariCredentials | undefined {
   for (const cookie of cookies) {
     if (!isLumoCookieDomain(cookie.domain)) continue;
-    if (!cookie.name.startsWith("AUTH-") || !cookie.value) continue;
+    if (!cookie.name.startsWith("AUTH-") || !isUsableLumoToken(cookie.value)) continue;
     const uid = cookie.name.slice("AUTH-".length);
     if (uid) return { uid, token: cookie.value, profile };
   }
