@@ -14,6 +14,8 @@
     "firefox-auth.ts",
     "chrome-auth.ts",
     "chromium-auth.ts",
+    "brave-auth.ts",
+    "discovery-notes.ts",
     "chromium-cookies.ts",
     "safari-auth.ts",
     "sqlite-cookies.ts",

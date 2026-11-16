@@ -9,12 +9,14 @@ import {
 export type ChromiumBrowserCredentials = ChromiumCredentials;
 
 const CHROMIUM_CONFIG: ChromiumBrowserConfig = {
+  displayName: "Chromium",
   keychainServiceName: "Chromium Safe Storage",
   secretToolApplication: "chromium",
   macAppSupportPath: ["Chromium"],
-  linuxConfigDirName: "chromium",
+  linuxConfigPath: ["chromium"],
   flatpakAppId: "org.chromium.Chromium",
-  snapName: "chromium",
+  snapPaths: [["chromium", "common", "chromium"]],
+  windowsUserDataPath: ["Chromium", "User Data"],
   profileEnvVar: "LUMO_CHROMIUM_PROFILE",
   snapshotPrefix: "pi-lumo-chromium-",
 };
@@ -23,8 +25,9 @@ export function chromiumProfileRoots(
   home?: string,
   xdgConfigHome?: string,
   currentPlatform?: NodeJS.Platform,
+  localAppData?: string,
 ): string[] {
-  return profileRootsForBrowser(CHROMIUM_CONFIG, home, xdgConfigHome, currentPlatform);
+  return profileRootsForBrowser(CHROMIUM_CONFIG, home, xdgConfigHome, currentPlatform, localAppData);
 }
 
 export function discoverChromiumCredentials(
